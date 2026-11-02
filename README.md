@@ -12,7 +12,7 @@ The demo covers:
 
 - Multi-document PDF splitting (heuristic DI layout, or the Content Understanding router)
 - Document library: upload, list, process, delete, scoped by the `x-tenant-id` header
-- Example packets: open pre-computed sample packets in the library, or run them live
+- Example packets: open pre-computed sample packets in the library, run them live, or compare Heuristic and CU live
 - Ask the agent about one packet (answers cite segments `[S#]` and policy passages `[P#]`)
 - Ask the library across packets (Foundry IQ knowledge base plus direct index search)
 - Three-agent underwriting review (Intake, Compliance, Underwriter) with a human decision step
@@ -145,7 +145,7 @@ The library panel lists three synthetic packets from `app/examples/` (metadata i
 | Missing documents | One paystub and one bank statement month. The review reports the missing second paystub and second month. |
 | Identity conflict | The paystub, bank statement, passport and driver's license each name a different person. The review flags the identity conflicts first. |
 
-**Open example** loads a packet into the library from stored results, with no Document Intelligence, Content Understanding, or Claude calls. Its record is tagged `example`, and loading the same packet again returns the same record. **Process live** fetches the PDF and runs it through the strategy selected in the dropdown (Compare uses Heuristic).
+**Open example** loads a packet into the library from stored results, with no Document Intelligence, Content Understanding, or Claude calls. Its record is tagged `example`, and loading the same packet again returns the same record. **Process live** fetches the PDF and runs it through the strategy selected in the dropdown. With **Compare** selected, both example buttons run Heuristic and CU on the PDF and show the side-by-side comparison. That takes about 80 seconds, uses Document Intelligence and Content Understanding, and saves nothing.
 
 Stored results are regenerated with `scripts/build_examples.py`. It needs `DI_ENDPOINT` and an Azure sign-in for that account:
 

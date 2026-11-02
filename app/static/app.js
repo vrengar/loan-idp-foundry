@@ -56,7 +56,7 @@ async function loadDocs() {
     const docs = await api("/api/documents");
     list.innerHTML = docs.map((d) => `
       <li class="${d.id === state.selectedId ? "active" : ""}" data-id="${esc(d.id)}">
-        <div class="doc-name">${esc(d.fileName)}${d.exampleId ? ` <span class="pill">example</span>` : ""}</div>
+        <div class="doc-name">${esc(d.fileName)} <span class="pill">${esc(d.mode || "")}</span>${d.exampleId ? ` <span class="pill">example</span>` : ""}</div>
         <div class="doc-meta">${pill(d.status)} ${d.summary ? `${esc(d.summary.segmentCount)} segments · ${esc(d.summary.totalPages)} pages` : ""}</div>
       </li>`).join("") || `<li class="muted">No documents yet. Upload a loan packet.</li>`;
     list.querySelectorAll("li[data-id]").forEach((li) => li.addEventListener("click", () => selectDoc(li.dataset.id)));
@@ -276,9 +276,26 @@ async function loadExamples() {
   }
 }
 
+async function examplePdfForm(id, fileName) {
+  const response = await fetch(`/api/examples/${encodeURIComponent(id)}/pdf`);
+  if (!response.ok) throw new Error(`${response.status}: could not fetch ${fileName}`);
+  const form = new FormData();
+  form.append("file", await response.blob(), fileName);
+  return form;
+}
+
 async function runExample(id, action) {
   const status = $("#uploadStatus");
   const { fileName } = state.examples[id];
+  if ($("#mode").value === "compare") {
+    status.textContent = "Fetching the example PDF…";
+    try {
+      await runCompare(await examplePdfForm(id, fileName), fileName);
+    } catch (err) {
+      status.textContent = err.message;
+    }
+    return;
+  }
   const mode = strategy();
   try {
     let doc;
@@ -287,10 +304,7 @@ async function runExample(id, action) {
       doc = await api(`/api/examples/${encodeURIComponent(id)}/load?mode=${mode}`, { method: "POST" });
     } else {
       status.textContent = "Fetching the example PDF…";
-      const response = await fetch(`/api/examples/${encodeURIComponent(id)}/pdf`);
-      if (!response.ok) throw new Error(`${response.status}: could not fetch ${fileName}`);
-      const form = new FormData();
-      form.append("file", await response.blob(), fileName);
+      const form = await examplePdfForm(id, fileName);
       doc = await busy(`Processing ${fileName} live (${mode})`, () => api(`/api/documents?mode=${mode}`, { method: "POST", body: form }));
     }
     status.textContent = `${action === "open" ? "Loaded" : "Processed"} ${doc.fileName} (${mode}).`;
