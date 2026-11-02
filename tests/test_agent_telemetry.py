@@ -218,3 +218,16 @@ def test_annotate_current_span_sets_attributes_on_the_active_span(spans: InMemor
 
 def test_fastapi_app_is_instrumented_for_request_spans():
     assert getattr(api_app, "_is_instrumented_by_opentelemetry", False) is True
+
+
+def test_azure_monitor_keeps_every_span(monkeypatch: pytest.MonkeyPatch):
+    import azure.monitor.opentelemetry as distro
+
+    seen: dict[str, Any] = {}
+    monkeypatch.setattr(distro, "configure_azure_monitor", lambda **kwargs: seen.update(kwargs))
+    monkeypatch.setattr(telemetry, "_configured", False)
+    monkeypatch.setattr(telemetry.settings, "applicationinsights_connection_string", "InstrumentationKey=test")
+
+    telemetry.configure()
+
+    assert seen["sampling_ratio"] == 1.0

@@ -375,7 +375,7 @@ Each agent run and each Claude call is an OpenTelemetry span in the same App Ins
 | `invoke_agent library_qa` | internal | `gen_ai.request.model`, `idp.tenant_id`, `idp.passage_count` |
 | `chat <model>` | client | `gen_ai.provider.name` (`anthropic`), `gen_ai.request.max_tokens`, `gen_ai.usage.input_tokens`, `gen_ai.usage.output_tokens`, `gen_ai.response.finish_reasons`, `idp.attempts` |
 
-API request spans come from the FastAPI instrumentation. The ask and review routes add `idp.tenant_id` and `idp.document_id` to them. The HTTP call under each `chat` span is a dependency row from the `requests` instrumentation. Queries: [`loadtest/agent-steps.kql`](loadtest/agent-steps.kql).
+API request spans come from the FastAPI instrumentation. The ask and review routes add `idp.tenant_id` and `idp.document_id` to them. The HTTP call under each `chat` span is a dependency row from the `requests` instrumentation. Every span is exported: the setup sets `sampling_ratio=1.0`, because the distro's default sampler drops spans during bursts. Queries: [`loadtest/agent-steps.kql`](loadtest/agent-steps.kql).
 
 ---
 

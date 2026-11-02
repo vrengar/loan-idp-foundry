@@ -54,7 +54,9 @@ def configure() -> None:
 
             # logger_name="idp" attaches the OTel handler to the parent of
             # "idp.api" and "idp.telemetry" so all our logs flow to App Insights.
-            configure_azure_monitor(connection_string=conn, logger_name="idp")
+            # The default sampler is rate-limited and drops spans during bursts, which loses agent and
+            # model-call spans. Keep every span at this demo volume.
+            configure_azure_monitor(connection_string=conn, logger_name="idp", sampling_ratio=1.0)
             _log.info("Azure Monitor configured.")
         except Exception as exc:  # noqa: BLE001
             # Never let a telemetry failure crash the app — log and keep running.
