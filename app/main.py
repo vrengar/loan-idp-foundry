@@ -1,6 +1,7 @@
 """FastAPI app: upload a merged loan-application PDF, get per-document extraction."""
 from __future__ import annotations
 
+import hashlib
 import io
 import logging
 import os
@@ -10,7 +11,7 @@ from contextlib import asynccontextmanager
 from typing import Literal
 
 from fastapi import FastAPI, File, Header, HTTPException, Query, Request, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.responses import Response
 from starlette.types import Scope
@@ -959,6 +960,14 @@ app.include_router(create_library_router(
 _STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
 
 
+def _asset_version(name: str) -> str:
+    with open(os.path.join(_STATIC_DIR, name), "rb") as handle:
+        return hashlib.sha256(handle.read()).hexdigest()[:12]
+
+
+_UI_ASSET_VERSIONS = {f"/static/{name}": _asset_version(name) for name in ("styles.css", "app.js")}
+
+
 class _RevalidatingStaticFiles(StaticFiles):
     """Browsers revalidate UI files on every load, so a redeploy is not hidden behind a cached script."""
 
@@ -972,6 +981,11 @@ app.mount("/static", _RevalidatingStaticFiles(directory=_STATIC_DIR), name="stat
 
 
 @app.get("/")
-def home() -> FileResponse:
-    return FileResponse(os.path.join(_STATIC_DIR, "index.html"), headers={"Cache-Control": "no-cache"})
+def home() -> HTMLResponse:
+    # Each asset URL carries a hash of its content, so a browser that cached the old file requests the new URL on refresh.
+    with open(os.path.join(_STATIC_DIR, "index.html"), encoding="utf-8") as handle:
+        html = handle.read()
+    for path, version in _UI_ASSET_VERSIONS.items():
+        html = html.replace(f'"{path}"', f'"{path}?v={version}"')
+    return HTMLResponse(html, headers={"Cache-Control": "no-cache"})
 
