@@ -12,6 +12,8 @@ from typing import Literal
 from fastapi import FastAPI, File, Header, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.responses import Response
+from starlette.types import Scope
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from pypdf import PdfReader, PdfWriter
 
@@ -955,10 +957,21 @@ app.include_router(create_library_router(
 
 
 _STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
-app.mount("/static", StaticFiles(directory=_STATIC_DIR), name="static")
+
+
+class _RevalidatingStaticFiles(StaticFiles):
+    """Browsers revalidate UI files on every load, so a redeploy is not hidden behind a cached script."""
+
+    async def get_response(self, path: str, scope: Scope) -> Response:
+        response = await super().get_response(path, scope)
+        response.headers["Cache-Control"] = "no-cache"
+        return response
+
+
+app.mount("/static", _RevalidatingStaticFiles(directory=_STATIC_DIR), name="static")
 
 
 @app.get("/")
 def home() -> FileResponse:
-    return FileResponse(os.path.join(_STATIC_DIR, "index.html"))
+    return FileResponse(os.path.join(_STATIC_DIR, "index.html"), headers={"Cache-Control": "no-cache"})
 

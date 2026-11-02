@@ -6,6 +6,19 @@ const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (c) => ({
 const tenant = () => $("#tenant").value.trim() || "demo";
 const pill = (status) => `<span class="pill ${esc(status)}">${esc(status)}</span>`;
 const askButton = $("#askForm button");
+const POLL_MS = 3000;
+// Stops background polling after about 10 minutes, so a record that never finishes cannot poll forever.
+const MAX_BACKGROUND_POLLS = 200;
+let refreshTimer = null;
+let pollsLeft = MAX_BACKGROUND_POLLS;
+let busyNow = false;
+const setAgentControls = (enabled) => {
+  [askButton, $("#question"), $("#runReview")].forEach((el) => { el.disabled = !enabled; });
+};
+const setUploadControls = (enabled) => {
+  document.querySelectorAll("#uploadForm button, #uploadForm input, #uploadForm select, #exampleList button")
+    .forEach((el) => { el.disabled = !enabled; });
+};
 
 async function api(path, options = {}) {
   const headers = { "x-tenant-id": tenant(), ...(options.headers || {}) };
@@ -38,6 +51,7 @@ async function refreshStatus() {
 
 async function loadDocs() {
   const list = $("#docs");
+  clearTimeout(refreshTimer);
   try {
     const docs = await api("/api/documents");
     list.innerHTML = docs.map((d) => `
@@ -46,8 +60,17 @@ async function loadDocs() {
         <div class="doc-meta">${pill(d.status)} ${d.summary ? `${esc(d.summary.segmentCount)} segments · ${esc(d.summary.totalPages)} pages` : ""}</div>
       </li>`).join("") || `<li class="muted">No documents yet. Upload a loan packet.</li>`;
     list.querySelectorAll("li[data-id]").forEach((li) => li.addEventListener("click", () => selectDoc(li.dataset.id)));
+    const pending = docs.some((d) => d.status === "uploaded" || d.status === "processing");
+    if (!pending) {
+      pollsLeft = MAX_BACKGROUND_POLLS;
+    } else if (pollsLeft > 0) {
+      pollsLeft -= 1;
+      refreshTimer = setTimeout(loadDocs, POLL_MS);
+    }
+    return docs;
   } catch (err) {
     list.innerHTML = `<li class="bad">${esc(err.message)}</li>`;
+    return null;
   }
 }
 
@@ -55,9 +78,7 @@ async function selectDoc(id) {
   state.selectedId = id;
   $("#chat").innerHTML = "";
   $("#review").innerHTML = "";
-  askButton.disabled = false;
-  $("#question").disabled = false;
-  $("#runReview").disabled = false;
+  setAgentControls(true);
   const doc = await api(`/api/documents/${encodeURIComponent(id)}`);
   state.selected = doc;
   renderDetails(doc);
@@ -67,6 +88,21 @@ async function selectDoc(id) {
     renderSegments(state.result);
   }
   await loadDocs();
+}
+
+async function refreshLibrary() {
+  const docs = await loadDocs();
+  if (docs === null) {
+    $("#details").textContent = "The library is unavailable, so there is no document to ask about.";
+    return;
+  }
+  if (state.selectedId) return;
+  const first = docs.find((d) => d.status === "processed");
+  if (first) {
+    await selectDoc(first.id);
+  } else {
+    $("#details").textContent = "Upload a packet or open an example to start.";
+  }
 }
 
 function renderDetails(doc) {
@@ -186,9 +222,26 @@ function renderCompare(data) {
     <details><summary>Raw comparison JSON</summary><pre>${esc(JSON.stringify(data, null, 2))}</pre></details>`;
 }
 
-async function runCompare(form) {
+async function busy(label, call) {
+  const status = $("#uploadStatus");
+  const started = Date.now();
+  const tick = () => { status.textContent = `${label}… ${Math.round((Date.now() - started) / 1000)}s`; };
+  tick();
+  const timer = setInterval(tick, 1000);
+  busyNow = true;
+  setUploadControls(false);
   try {
-    const data = await api("/process?mode=compare", { method: "POST", body: form });
+    return await call();
+  } finally {
+    clearInterval(timer);
+    busyNow = false;
+    setUploadControls(true);
+  }
+}
+
+async function runCompare(form, name) {
+  try {
+    const data = await busy(`Comparing ${name} (not saved)`, () => api("/process?mode=compare", { method: "POST", body: form }));
     $("#uploadStatus").textContent = "Compared both strategies. Nothing was saved to the library.";
     renderCompare(data);
   } catch (err) {
@@ -238,8 +291,7 @@ async function runExample(id, action) {
       if (!response.ok) throw new Error(`${response.status}: could not fetch ${fileName}`);
       const form = new FormData();
       form.append("file", await response.blob(), fileName);
-      status.textContent = "Processing live… this can take a minute.";
-      doc = await api(`/api/documents?mode=${mode}`, { method: "POST", body: form });
+      doc = await busy(`Processing ${fileName} live (${mode})`, () => api(`/api/documents?mode=${mode}`, { method: "POST", body: form }));
     }
     status.textContent = `${action === "open" ? "Loaded" : "Processed"} ${doc.fileName} (${mode}).`;
     await loadDocs();
@@ -253,24 +305,25 @@ async function runExample(id, action) {
 $("#uploadForm").addEventListener("submit", async (event) => {
   event.preventDefault();
   const file = $("#file").files[0];
-  if (!file) return;
+  if (!file || busyNow) return;
   const form = new FormData();
   form.append("file", file);
   const mode = $("#mode").value;
-  $("#uploadStatus").textContent = "Processing… this can take a minute.";
   if (mode === "compare") {
-    await runCompare(form);
+    await runCompare(form, file.name);
     return;
   }
+  let doc;
   try {
-    const doc = await api(`/api/documents?mode=${encodeURIComponent(mode)}`, { method: "POST", body: form });
-    $("#uploadStatus").textContent = `Processed ${doc.fileName}.`;
-    await loadDocs();
-    await selectDoc(doc.id);
+    doc = await busy(`Processing ${file.name} (${mode})`, () => api(`/api/documents?mode=${encodeURIComponent(mode)}`, { method: "POST", body: form }));
   } catch (err) {
     $("#uploadStatus").textContent = err.message;
     await loadDocs();
+    return;
   }
+  $("#uploadStatus").textContent = `Processed ${doc.fileName}.`;
+  await loadDocs();
+  await selectDoc(doc.id);
 });
 
 $("#askForm").addEventListener("submit", async (event) => {
@@ -387,9 +440,10 @@ $("#tenant").value = localStorage.getItem("tenant") || "demo";
 $("#tenant").addEventListener("change", () => {
   localStorage.setItem("tenant", tenant());
   state.selectedId = null;
-  loadDocs();
+  setAgentControls(false);
+  refreshLibrary();
 });
 
 refreshStatus();
-loadDocs();
+refreshLibrary();
 loadExamples();
