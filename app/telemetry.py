@@ -10,17 +10,26 @@ durationMs, priceVersion, service, plus any caller-supplied extras
 
 These are the *advanced* cost-tracking signals used by
 `loadtest/cost-allocation.kql` to allocate spend per SaaS tenant per service.
+
+Agent runs and Claude calls are OpenTelemetry spans (`agent_span`, `chat_span`). Their queries are in
+`loadtest/agent-steps.kql`.
 """
 from __future__ import annotations
 
 import logging
 import os
+from collections.abc import Iterator
+from contextlib import contextmanager
 from typing import Any
+
+from opentelemetry import trace
+from opentelemetry.trace import SpanKind
 
 from .config import settings
 from .pricing import PRICE_VERSION, estimate_cost_usd
 
 _log = logging.getLogger("idp.telemetry")
+_tracer = trace.get_tracer("idp")
 _configured = False
 
 
@@ -118,4 +127,51 @@ def emit_cu_call_processed(
     if extra:
         payload.update(extra)
     _log.info("cu.calls.processed", extra=payload)
+
+
+@contextmanager
+def agent_span(agent: str, *, model: str | None = None, tags: dict[str, Any] | None = None) -> Iterator[trace.Span]:
+    """Span for one agent run: the review, packet Q&A, library Q&A, or a review role.
+
+    Records metadata only. Prompts, packet text, and model output are never recorded.
+    """
+    attributes: dict[str, Any] = {"gen_ai.operation.name": "invoke_agent", "gen_ai.agent.name": agent}
+    if model:
+        attributes["gen_ai.request.model"] = model
+    attributes.update(tags or {})
+    with _tracer.start_as_current_span(
+        f"invoke_agent {agent}", kind=SpanKind.INTERNAL, attributes=attributes
+    ) as span:
+        yield span
+
+
+@contextmanager
+def chat_span(model: str, max_tokens: int) -> Iterator[trace.Span]:
+    """Span for one Claude Messages API call. Token usage is added by record_chat_result."""
+    attributes: dict[str, Any] = {
+        "gen_ai.operation.name": "chat",
+        "gen_ai.provider.name": "anthropic",
+        "gen_ai.request.model": model,
+        "gen_ai.request.max_tokens": max_tokens,
+    }
+    with _tracer.start_as_current_span(f"chat {model}", kind=SpanKind.CLIENT, attributes=attributes) as span:
+        yield span
+
+
+def record_chat_result(span: trace.Span, payload: dict[str, Any]) -> None:
+    usage = payload.get("usage") or {}
+    if payload.get("model"):
+        span.set_attribute("gen_ai.response.model", str(payload["model"]))
+    if usage.get("input_tokens") is not None:
+        span.set_attribute("gen_ai.usage.input_tokens", int(usage["input_tokens"]))
+    if usage.get("output_tokens") is not None:
+        span.set_attribute("gen_ai.usage.output_tokens", int(usage["output_tokens"]))
+    if payload.get("stop_reason"):
+        span.set_attribute("gen_ai.response.finish_reasons", [str(payload["stop_reason"])])
+
+
+def annotate_current_span(attributes: dict[str, str]) -> None:
+    span = trace.get_current_span()
+    for key, value in attributes.items():
+        span.set_attribute(key, value)
 

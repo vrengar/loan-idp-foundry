@@ -6,6 +6,8 @@ from typing import Any
 
 import requests
 
+from .telemetry import chat_span, record_chat_result
+
 ANTHROPIC_VERSION = "2023-06-01"
 FOUNDRY_SCOPE = "https://ai.azure.com/.default"
 
@@ -31,15 +33,18 @@ class ClaudeClient:
             "system": system,
             "messages": [{"role": "user", "content": user}],
         }
-        for attempt in range(3):
-            response = requests.post(f"{self._base_url}/v1/messages", headers=headers, json=body, timeout=120)
-            if response.status_code == 429 and attempt < 2:
-                time.sleep(2 ** attempt)
-                continue
-            if response.status_code >= 400:
-                raise ClaudeError(f"{deployment} returned HTTP {response.status_code}: {response.text[:300]}")
-            payload = response.json()
-            return "".join(
-                block.get("text", "") for block in payload.get("content", []) if block.get("type") == "text"
-            )
-        raise ClaudeError(f"{deployment} stayed rate limited")
+        with chat_span(deployment, max_tokens) as span:
+            for attempt in range(3):
+                response = requests.post(f"{self._base_url}/v1/messages", headers=headers, json=body, timeout=120)
+                span.set_attribute("idp.attempts", attempt + 1)
+                if response.status_code == 429 and attempt < 2:
+                    time.sleep(2 ** attempt)
+                    continue
+                if response.status_code >= 400:
+                    raise ClaudeError(f"{deployment} returned HTTP {response.status_code}: {response.text[:300]}")
+                payload = response.json()
+                record_chat_result(span, payload)
+                return "".join(
+                    block.get("text", "") for block in payload.get("content", []) if block.get("type") == "text"
+                )
+            raise ClaudeError(f"{deployment} stayed rate limited")

@@ -1,0 +1,59 @@
+// Agent runs and Claude calls from App Insights (classic table names, same as cost-allocation.kql).
+// Run in the App Insights Logs blade, or with:
+//   az monitor app-insights query --app <name> -g <rg> --analytics-query "<query>"
+// Spans are emitted by app/telemetry.py and app/claude.py:
+//   invoke_agent <agent>  one agent run: underwriting_review, intake, compliance, underwriter,
+//                         packet_qa, library_qa (dependency type InProc)
+//   chat <model>          one Claude Messages call, with token usage (CLIENT)
+// Prompts, packet text, questions and model output are never recorded.
+
+// 1. Agent runs per day: volume, failures and average duration by agent.
+dependencies
+| where timestamp > ago(7d) and name startswith "invoke_agent "
+| extend agent = tostring(customDimensions["gen_ai.agent.name"])
+| summarize runs = count(), failed = countif(success == false), avgDuration = avg(duration)
+  by agent, bin(timestamp, 1d)
+| order by timestamp desc, runs desc
+
+// 2. Claude calls per model per day: tokens, retried calls and failures.
+dependencies
+| where timestamp > ago(7d) and name startswith "chat "
+| extend model = tostring(customDimensions["gen_ai.request.model"]),
+         inputTokens = toint(customDimensions["gen_ai.usage.input_tokens"]),
+         outputTokens = toint(customDimensions["gen_ai.usage.output_tokens"]),
+         attempts = toint(customDimensions["idp.attempts"])
+| summarize calls = count(), failed = countif(success == false), retried = countif(attempts > 1),
+            inputTokens = sum(inputTokens), outputTokens = sum(outputTokens)
+  by model, bin(timestamp, 1d)
+| order by timestamp desc, calls desc
+
+// 3. Agent activity per tenant (reviews, packet questions, library questions).
+dependencies
+| where timestamp > ago(7d)
+| where name in ("invoke_agent underwriting_review", "invoke_agent packet_qa", "invoke_agent library_qa")
+| extend tenant = tostring(customDimensions["idp.tenant_id"])
+| summarize runs = count() by tenant, agent = name
+| order by runs desc
+
+// 4. Recent reviews, one row each, with the duration of every role (joined by operation).
+let reviews = dependencies
+| where timestamp > ago(7d) and name == "invoke_agent underwriting_review"
+| project operation_Id, reviewed = timestamp, reviewDuration = duration,
+          tenant = tostring(customDimensions["idp.tenant_id"]),
+          recommendation = tostring(customDimensions["idp.recommendation"]);
+let roles = dependencies
+| where timestamp > ago(7d) and name in ("invoke_agent intake", "invoke_agent compliance", "invoke_agent underwriter")
+| summarize roleDurations = make_list(strcat(replace_string(name, "invoke_agent ", ""), " ", tostring(duration)))
+  by operation_Id;
+reviews
+| join kind=leftouter roles on operation_Id
+| project reviewed, tenant, recommendation, reviewDuration, roleDurations
+| order by reviewed desc
+| take 20
+
+// 5. Failed agent runs and model calls in the last day, newest first.
+dependencies
+| where timestamp > ago(1d) and success == false
+| where name startswith "invoke_agent " or name startswith "chat "
+| project timestamp, name, resultCode, duration, operation_Id
+| order by timestamp desc

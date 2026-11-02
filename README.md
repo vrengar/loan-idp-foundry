@@ -17,6 +17,7 @@ The demo covers:
 - Ask the library across packets (Foundry IQ knowledge base plus direct index search)
 - Three-agent underwriting review (Intake, Compliance, Underwriter) with a human decision step
 - Per-tenant page-count + cost telemetry for SaaS cost allocation
+- Agent telemetry: one App Insights span per agent run and Claude call, with token counts and no prompt or output text
 - Compare mode (heuristic vs Content Understanding) with cost and latency; nothing is saved
 - Architecture diagrams in the UI (Architecture button)
 
@@ -64,7 +65,7 @@ flowchart LR
 | Knowledge | `app/knowledge.py` | AI Search index, knowledge source, and knowledge base. Packet chunks per segment; policy rules indexed at startup |
 | Library storage | `app/library.py`, `app/persistence/` | Document records in Cosmos DB. PDFs and processed JSON in Blob Storage |
 | Examples | `app/examples.py`, `app/examples/` | Three committed sample packets with stored results |
-| Telemetry and cost | `app/telemetry.py`, `app/pricing.py` | `di.pages.processed` events to Application Insights, with list-price estimates |
+| Telemetry and cost | `app/telemetry.py`, `app/pricing.py` | `di.pages.processed` and `cu.calls.processed` events, plus agent and Claude call spans, to Application Insights. Cost values are list-price estimates |
 | Infrastructure | `infra/` | Bicep for the Foundry account and project, AI Search, Cosmos DB, Storage, Container Registry, Container Apps, networking, monitoring, and identity |
 
 ### Processing pipeline
@@ -84,7 +85,7 @@ flowchart LR
 - **Identity:** one user-assigned managed identity calls every Azure service. Keys are optional and only for local testing.
 - **Private mode (prod):** public access is disabled for Foundry, AI Search, Cosmos DB, and Storage, which use private endpoints. The Container Apps environment joins a virtual network. Container Registry and Log Analytics stay public.
 - **Dev:** public access stays on for testing. The library is off on dev (see Known limitations).
-- **Telemetry:** Application Insights receives `di.pages.processed` events. The connection string is set on the Container App.
+- **Telemetry:** Application Insights receives `di.pages.processed` and `cu.calls.processed` events, plus OpenTelemetry spans for API requests, agent runs, and Claude calls. The connection string is set on the Container App.
 
 ### Billing models by strategy
 
@@ -226,7 +227,7 @@ Runtime auth: the Container App uses its user-assigned managed identity for Docu
 See [`loadtest/README.md`](loadtest/README.md). Two paths:
 
 - **Simple**: Azure Load Testing service runs the JMX, then Cost Management filtered by tag `app=idp-demo` shows actual spend.
-- **Advanced**: Each DI call emits an App Insights `traces` record `di.pages.processed` with `tenantId`, `model`, `pageCount`, `estimatedCostUsd`, `durationMs`, `splitStrategy`, `stage`, `correlationId`. KQL in [`loadtest/cost-allocation.kql`](loadtest/cost-allocation.kql) rolls these up per tenant / strategy / model.
+- **Advanced**: Each DI call emits an App Insights `traces` record `di.pages.processed` with `tenantId`, `model`, `pageCount`, `estimatedCostUsd`, `durationMs`, `splitStrategy`, `stage`, `correlationId`. KQL in [`loadtest/cost-allocation.kql`](loadtest/cost-allocation.kql) rolls these up per tenant / strategy / model. Agent runs and Claude calls are spans too. [`loadtest/agent-steps.kql`](loadtest/agent-steps.kql) covers agent volume, token use, and review timing.
 
 ## Project structure
 
@@ -235,7 +236,7 @@ app/
   main.py                  # FastAPI app: /process, /api/* routes, static UI, startup setup
   di_client.py             # DI SDK wrapper (Managed Identity by default)
   splitter.py              # heuristic boundary detection + model routing
-  telemetry.py             # App Insights `di.pages.processed` events
+  telemetry.py             # App Insights events (DI and CU cost) and agent spans
   pricing.py               # DI unit prices for cost allocation (S0 list)
   library.py, library_api.py  # document library service and /api routes
   persistence/             # Cosmos DB and Blob Storage adapters, plus an in-memory store for tests
@@ -268,6 +269,7 @@ loadtest/
   loadtest.jmx
   loadtest-config.yaml
   cost-allocation.kql      # per-tenant rollup (prices mirror app/pricing.py)
+  agent-steps.kql          # agent runs, Claude calls, tokens, and review timing
 docs/
   custom-classifier.md     # retired classifier walkthrough (reference only)
   SPEC.md                  # original technical spec (historical; see this README)
@@ -361,6 +363,20 @@ Every DI call emits an App Insights `traces` row (`message == "di.pages.processe
 
 Reference rollup: [`loadtest/cost-allocation.kql`](loadtest/cost-allocation.kql).
 
+### Agent telemetry
+
+Each agent run and each Claude call is an OpenTelemetry span in the same App Insights resource. Spans hold metadata only: no prompts, packet text, questions, or model output.
+
+| Span | Kind | Attributes |
+|---|---|---|
+| `invoke_agent underwriting_review` | internal | `gen_ai.agent.name`, `idp.tenant_id`, `idp.correlation_id`, `idp.policy_source`, `idp.recommendation` |
+| `invoke_agent intake`, `invoke_agent compliance`, `invoke_agent underwriter` | internal | `gen_ai.request.model`, `idp.tenant_id`, `idp.correlation_id`. Children of the review span |
+| `invoke_agent packet_qa` | internal | `gen_ai.request.model`, `idp.tenant_id`, `idp.correlation_id`, `idp.policy_source` |
+| `invoke_agent library_qa` | internal | `gen_ai.request.model`, `idp.tenant_id`, `idp.passage_count` |
+| `chat <model>` | client | `gen_ai.provider.name` (`anthropic`), `gen_ai.request.max_tokens`, `gen_ai.usage.input_tokens`, `gen_ai.usage.output_tokens`, `gen_ai.response.finish_reasons`, `idp.attempts` |
+
+API request spans come from the FastAPI instrumentation. The ask and review routes add `idp.tenant_id` and `idp.document_id` to them. The HTTP call under each `chat` span is a dependency row from the `requests` instrumentation. Queries: [`loadtest/agent-steps.kql`](loadtest/agent-steps.kql).
+
 ---
 
 ## Pricing (DI S0 list, USD per 1k pages)
@@ -401,6 +417,7 @@ Caveats: list price only; commitment / batch / regional discounts, free tier, an
 - **Page load.** The UI loads the Mermaid script (about 3.5 MB) in `<head>`, so a slow connection can show a blank page until it downloads.
 - **Unused Cosmos containers.** The Bicep creates `reviews` and `jobs` containers that the code does not use. Reviews are stored on the document record.
 - **Opus is configured but unused.** `CLAUDE_OPUS_DEPLOYMENT` has no caller yet.
+- **Agents run in the app, not in Foundry Agent Service.** The review roles and Q&A are Python code that calls Claude through the Foundry endpoint. Their runs appear in Application Insights (see Telemetry contract), not in the Foundry tracing UI.
 - **Partial cost estimates.** Estimates use Document Intelligence and Content Understanding list prices. Claude token costs are not included.
 - **Passages can be cut short.** Retrieved policy or packet passages can be truncated. One review reported a truncated P6 passage.
 
@@ -429,6 +446,7 @@ These items are not implemented yet.
 | 10 | Load Mermaid only when the Architecture dialog opens, and add cache headers for static files | Faster first paint |
 | 11 | Add Claude token costs to the estimate | Full cost per packet |
 | 12 | GitHub Actions for tests and image builds | Repeatable releases |
+| 13 | Run the three agents as Foundry Agent Service agents, if Claude models are supported there | Agent runs also appear in Foundry tracing |
 
 ---
 

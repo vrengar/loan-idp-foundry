@@ -32,7 +32,7 @@ class FakeAgents:
         return {"recommendation": "refer", "rationale": "W-2 missing",
                 "conditions": ["Provide W-2"], "steps": []}
 
-    def ask_library(self, question, passages):
+    def ask_library(self, question, passages, tenant_id=None):
         return {"answer": f"{len(passages)} passage(s) found [P1]", "model": "claude-sonnet-5-5",
                 "passages": [{"label": f"P{n}", **p} for n, p in enumerate(passages, start=1)]}
 

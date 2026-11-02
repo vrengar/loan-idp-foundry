@@ -20,6 +20,7 @@ from .examples import (
 )
 from .knowledge import KnowledgeClient, knowledge_state
 from .library import LibraryError, LibraryService, LibraryUnavailable, NotFound, normalize_tenant
+from .telemetry import annotate_current_span
 
 log = logging.getLogger("idp.library")
 
@@ -176,6 +177,7 @@ def create_library_router(
             result = get_service().get_result(x_tenant_id, doc_id)
         except LibraryError as exc:
             _http(exc)
+        annotate_current_span({"idp.tenant_id": normalize_tenant(x_tenant_id), "idp.document_id": doc_id})
         try:
             return _agents().ask(body.question, result)
         except HTTPException:
@@ -195,6 +197,7 @@ def create_library_router(
             result = service.get_result(x_tenant_id, doc_id)
         except LibraryError as exc:
             _http(exc)
+        annotate_current_span({"idp.tenant_id": normalize_tenant(x_tenant_id), "idp.document_id": doc_id})
         try:
             review = _agents().review(result)
         except HTTPException:
@@ -228,6 +231,7 @@ def create_library_router(
             tenant = normalize_tenant(x_tenant_id)
         except LibraryError as exc:
             _http(exc)
+        annotate_current_span({"idp.tenant_id": tenant})
         try:
             passages = _knowledge().retrieve_library(body.question, tenant)
         except HTTPException:
@@ -236,7 +240,7 @@ def create_library_router(
             log.exception("library retrieval failed")
             raise HTTPException(status_code=502, detail=f"Knowledge base error: {type(exc).__name__}: {exc}") from exc
         try:
-            return _agents().ask_library(body.question, passages)
+            return _agents().ask_library(body.question, passages, tenant)
         except HTTPException:
             raise
         except Exception as exc:

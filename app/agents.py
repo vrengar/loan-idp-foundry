@@ -13,6 +13,7 @@ from .claude import ClaudeClient
 from .config import settings
 from .knowledge import KnowledgeClient, KnowledgeError, ready_knowledge
 from .policy import UNDERWRITING_RULES
+from .telemetry import agent_span
 
 log = logging.getLogger("idp.agents")
 
@@ -69,6 +70,15 @@ def numbered(passages: list[str]) -> str:
     return "\n".join(f"[P{number}] {text}" for number, text in enumerate(passages, start=1))
 
 
+def _tags(result: dict[str, Any]) -> dict[str, str]:
+    tags: dict[str, str] = {}
+    if result.get("tenantId"):
+        tags["idp.tenant_id"] = str(result["tenantId"])
+    if result.get("correlationId"):
+        tags["idp.correlation_id"] = str(result["correlationId"])
+    return tags
+
+
 class LoanAgents:
     def __init__(self, client: ClaudeClient, knowledge: Callable[[], KnowledgeClient] | None = None) -> None:
         self._client = client
@@ -101,20 +111,26 @@ class LoanAgents:
 
     def ask(self, question: str, result: dict[str, Any]) -> dict[str, Any]:
         model = settings.claude_sonnet_deployment
-        policy, source = self._policy(question)
-        user = (
-            f"Packet:\n{packet_context(result)}\n\n"
-            f"Policy passages:\n{numbered([p['content'] for p in policy])}\n\n"
-            f"Question: {question}"
-        )
-        answer = self._client.complete(model, ASK_SYSTEM, user, max_tokens=600)
+        with agent_span("packet_qa", model=model, tags=_tags(result)) as span:
+            policy, source = self._policy(question)
+            span.set_attribute("idp.policy_source", source)
+            user = (
+                f"Packet:\n{packet_context(result)}\n\n"
+                f"Policy passages:\n{numbered([p['content'] for p in policy])}\n\n"
+                f"Question: {question}"
+            )
+            answer = self._client.complete(model, ASK_SYSTEM, user, max_tokens=600)
         return {"answer": answer.strip(), "model": model, "policySource": source}
 
-    def ask_library(self, question: str, passages: list[dict[str, str]]) -> dict[str, Any]:
+    def ask_library(self, question: str, passages: list[dict[str, str]], tenant_id: str | None = None) -> dict[str, Any]:
         model = settings.claude_sonnet_deployment
-        listing = "\n\n".join(f"[P{n}] {p['title']}\n{p['content']}" for n, p in enumerate(passages, start=1))
-        user = f"Passages:\n{listing or '(no passages found)'}\n\nQuestion: {question}"
-        answer = self._client.complete(model, LIBRARY_SYSTEM, user, max_tokens=600)
+        tags: dict[str, Any] = {"idp.passage_count": len(passages)}
+        if tenant_id:
+            tags["idp.tenant_id"] = tenant_id
+        with agent_span("library_qa", model=model, tags=tags):
+            listing = "\n\n".join(f"[P{n}] {p['title']}\n{p['content']}" for n, p in enumerate(passages, start=1))
+            user = f"Passages:\n{listing or '(no passages found)'}\n\nQuestion: {question}"
+            answer = self._client.complete(model, LIBRARY_SYSTEM, user, max_tokens=600)
         cited = [
             {"label": f"P{n}", "title": p["title"], "content": p["content"]}
             for n, p in enumerate(passages, start=1)
@@ -122,23 +138,27 @@ class LoanAgents:
         return {"answer": answer.strip(), "model": model, "passages": cited}
 
     def review(self, result: dict[str, Any]) -> dict[str, Any]:
-        context = packet_context(result)
-        policy, source = self._policy(None)
-        rules = numbered([p["content"] for p in policy])
+        tags = _tags(result)
         steps: list[dict[str, str]] = []
+        with agent_span("underwriting_review", tags=tags) as root:
+            context = packet_context(result)
+            policy, source = self._policy(None)
+            root.set_attribute("idp.policy_source", source)
+            rules = numbered([p["content"] for p in policy])
 
-        profile = self._step(steps, "Intake", settings.claude_haiku_deployment, INTAKE_SYSTEM,
-                             f"Packet:\n{context}")
-        checks = self._step(steps, "Compliance", settings.claude_sonnet_deployment,
-                            COMPLIANCE_SYSTEM.format(policy=rules),
-                            f"Applicant profile:\n{profile}\n\nPacket:\n{context}")
-        decision_text = self._step(steps, "Underwriter", settings.claude_sonnet_deployment, UNDERWRITER_SYSTEM,
-                                   f"Applicant profile:\n{profile}\n\nCompliance checks:\n{checks}")
+            profile = self._step(steps, "Intake", settings.claude_haiku_deployment, INTAKE_SYSTEM,
+                                 f"Packet:\n{context}", tags)
+            checks = self._step(steps, "Compliance", settings.claude_sonnet_deployment,
+                                COMPLIANCE_SYSTEM.format(policy=rules),
+                                f"Applicant profile:\n{profile}\n\nPacket:\n{context}", tags)
+            decision_text = self._step(steps, "Underwriter", settings.claude_sonnet_deployment, UNDERWRITER_SYSTEM,
+                                       f"Applicant profile:\n{profile}\n\nCompliance checks:\n{checks}", tags)
 
-        decision = parse_json(decision_text)
-        recommendation = str(decision.get("recommendation", "refer")).lower()
-        if recommendation not in ("approve", "refer", "decline"):
-            recommendation = "refer"
+            decision = parse_json(decision_text)
+            recommendation = str(decision.get("recommendation", "refer")).lower()
+            if recommendation not in ("approve", "refer", "decline"):
+                recommendation = "refer"
+            root.set_attribute("idp.recommendation", recommendation)
         return {
             "recommendation": recommendation,
             "rationale": decision.get("rationale") or decision_text,
@@ -147,8 +167,10 @@ class LoanAgents:
             "policySource": source,
         }
 
-    def _step(self, steps: list[dict[str, str]], agent: str, model: str, system: str, user: str) -> str:
-        text = self._client.complete(model, system, user, max_tokens=2000).strip()
+    def _step(self, steps: list[dict[str, str]], agent: str, model: str, system: str, user: str,
+              tags: dict[str, str]) -> str:
+        with agent_span(agent.lower(), model=model, tags=tags):
+            text = self._client.complete(model, system, user, max_tokens=2000).strip()
         steps.append({"agent": agent, "model": model, "output": text})
         return text
 

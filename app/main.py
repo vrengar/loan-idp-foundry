@@ -12,6 +12,7 @@ from typing import Literal
 from fastapi import FastAPI, File, Header, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from pypdf import PdfReader, PdfWriter
 
 from .config import settings
@@ -46,6 +47,7 @@ async def _lifespan(_: FastAPI):
 
 
 app = FastAPI(title="IDP Demo — Loan Application Review", lifespan=_lifespan)
+FastAPIInstrumentor.instrument_app(app, excluded_urls="healthz,static")
 
 # Two strategies are supported on /process. "compare" runs both (heuristic, cu)
 # back-to-back for side-by-side cost/latency. The DI custom classifier was retired.

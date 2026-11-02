@@ -23,7 +23,8 @@ Two complementary tracks:
 The API emits `di.pages.processed` custom events with `tenantId`, `model`, `pageCount`,
 `estimatedCostUsd`. Open Application Insights → Logs and run
 [`cost-allocation.kql`](cost-allocation.kql) to chargeback per tenant in real time
-(no waiting on Cost Management rollups).
+(no waiting on Cost Management rollups). Agent runs and Claude calls are traced too: run
+[`agent-steps.kql`](agent-steps.kql) for agent volume, token use, and review timing.
 
 Configure tenants in the JMX `tenantId` CSV (`tenants.csv`) so a single load run
 exercises a multi-tenant mix.
