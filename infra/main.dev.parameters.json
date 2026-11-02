@@ -1,0 +1,21 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "environmentName": { "value": "dev" },
+    "location": { "value": "eastus" },
+    "cosmosLocation": { "value": "eastus2" },
+    "resourceGroupName": { "value": "rg-idp-dev" },
+    "networkMode": { "value": "public" },
+    "foundryAccountName": { "value": "idp-workspace-dev" },
+    "foundryProjectName": { "value": "idp-demo" },
+    "claudeOrganizationName": { "value": "Microsoft Non-Production" },
+    "claudeCountryCode": { "value": "US" },
+    "claudeIndustry": { "value": "technology" },
+    "claudeSonnetCapacity": { "value": 10 },
+    "claudeOpusCapacity": { "value": 5 },
+    "claudeHaikuCapacity": { "value": 5 },
+    "cuCompletionCapacity": { "value": 20 },
+    "embeddingCapacity": { "value": 60 }
+  }
+}

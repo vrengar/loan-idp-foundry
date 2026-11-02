@@ -1,0 +1,15 @@
+.venv
+.git
+.github
+.azure
+.env
+__pycache__
+*.pyc
+infra
+loadtest
+docs
+tests
+samples
+*.pdf
+resp.json
+cu_resp.json

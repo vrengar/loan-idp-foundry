@@ -2,11 +2,15 @@
   "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
   "contentVersion": "1.0.0.0",
   "parameters": {
-    "resourceGroupName": { "value": "IDP-rg" },
-    "location":          { "value": "eastus" },
-    "envName":           { "value": "${AZURE_ENV_NAME}" },
-    "apiImage":          { "value": "${SERVICE_API_IMAGE_NAME=mcr.microsoft.com/azuredocs/containerapps-helloworld:latest}" },
-    "classifierId":      { "value": "${CLASSIFIER_ID=}" },
-    "cuRouterAnalyzerId": { "value": "${CU_ROUTER_ANALYZER_ID=}" }
+    "environmentName": { "value": "prod" },
+    "location": { "value": "eastus" },
+    "cosmosLocation": { "value": "eastus2" },
+    "resourceGroupName": { "value": "rg-idp-prod" },
+    "networkMode": { "value": "private" },
+    "foundryAccountName": { "value": "idp-workspace-private" },
+    "foundryProjectName": { "value": "idp-demo" },
+    "claudeOrganizationName": { "value": "Microsoft Non-Production" },
+    "claudeCountryCode": { "value": "US" },
+    "claudeIndustry": { "value": "technology" }
   }
 }

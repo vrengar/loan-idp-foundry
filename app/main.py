@@ -3,12 +3,15 @@ from __future__ import annotations
 
 import io
 import logging
+import os
 import time
 import uuid
+from contextlib import asynccontextmanager
 from typing import Literal
 
 from fastapi import FastAPI, File, Header, HTTPException, Query, Request, UploadFile
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 from pypdf import PdfReader, PdfWriter
 
 from .config import settings
@@ -16,23 +19,37 @@ from .cu_client import CUClient
 from .di_client import DIClient
 from .pricing import estimate_cost_usd
 from .splitter import classify_page, segments_from_page_types
-from .splitter_classifier import segments_from_classifier_result
 from .telemetry import (
     configure as configure_telemetry,
     emit_cu_call_processed,
     emit_pages_processed,
 )
+from .library import get_library_service
+from .library_api import create_library_router
+from .cu_router import start_background_setup as start_cu_router_setup
+from .agents import get_loan_agents
+from .knowledge import get_knowledge, start_background_setup as start_knowledge_setup
+from .policy import UNDERWRITING_RULES
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("idp.api")
 
 # Wire OTel -> App Insights at import time so even startup logs are captured.
 configure_telemetry()
-app = FastAPI(title="IDP Demo — Loan Application Review")
 
-# Three strategies are supported on /process. "compare" runs all three
-# (heuristic, classifier, cu) back-to-back for side-by-side cost/latency.
-SplitStrategy = Literal["heuristic", "classifier", "cu"]
+
+@asynccontextmanager
+async def _lifespan(_: FastAPI):
+    start_cu_router_setup()
+    start_knowledge_setup(UNDERWRITING_RULES)
+    yield
+
+
+app = FastAPI(title="IDP Demo — Loan Application Review", lifespan=_lifespan)
+
+# Two strategies are supported on /process. "compare" runs both (heuristic, cu)
+# back-to-back for side-by-side cost/latency. The DI custom classifier was retired.
+SplitStrategy = Literal["heuristic", "cu"]
 
 # CU prebuilt analyzer routing.
 #
@@ -53,11 +70,8 @@ SplitStrategy = Literal["heuristic", "classifier", "cu"]
 # }
 
 
-@app.get("/", response_class=HTMLResponse)
+@app.get("/legacy", response_class=HTMLResponse)
 def index() -> str:
-    classifier_configured = bool(settings.classifier_id)
-    classifier_label = settings.classifier_id or "not configured"
-    classifier_dot = "ok" if classifier_configured else "muted"
     return f"""<!doctype html>
 <html lang="en">
 <head>
@@ -142,16 +156,12 @@ def index() -> str:
   @keyframes spin{{to{{transform:rotate(360deg)}}}}
   .err{{background:var(--bad-soft);color:var(--bad);padding:12px;border-radius:8px;border:1px solid #f3c4c1}}
   .strategy-h{{border-left:3px solid var(--warn)}}
-  .strategy-c{{border-left:3px solid var(--brand)}}
   .strategy-u{{border-left:3px solid #0a6a3f}}
 </style>
 </head>
 <body>
 <header>
   <h1>IDP Demo — Loan Application Review</h1>
-  <span class="meta">
-    <span class="dot {classifier_dot}"></span>Classifier: {classifier_label}
-  </span>
   <span class="meta"><a href="/healthz">/healthz</a> · <a href="/docs">/docs</a></span>
 </header>
 <main>
@@ -163,9 +173,8 @@ def index() -> str:
       </label>
       <div class="modes" role="radiogroup">
         <label class="sel"><input type="radio" name="mode" value="heuristic" checked/> Heuristic (DI)</label>
-        <label><input type="radio" name="mode" value="classifier"/> Custom classifier (DI)</label>
         <label><input type="radio" name="mode" value="cu"/> Content Understanding</label>
-        <label><input type="radio" name="mode" value="compare"/> Compare all 3</label>
+        <label><input type="radio" name="mode" value="compare"/> Compare heuristic vs CU</label>
       </div>
       <label class="field" style="flex:1">PDF file
         <input type="file" name="file" accept="application/pdf" required/>
@@ -267,7 +276,7 @@ function singleResult(r) {{
 }}
 
 function compareResult(d) {{
-  const cmp = d.comparison, h = d.heuristic, c = d.classifier, u = d.cu;
+  const cmp = d.comparison, h = d.heuristic, u = d.cu;
   const col = (label, cls, run, baselineCost, baselineDur) => {{
     const dCost = baselineCost - run.billing.totalCostEstimateUsd;
     const dDur  = baselineDur  - run.totalDurationMs;
@@ -320,15 +329,14 @@ function compareResult(d) {{
       }}
       return out;
     }};
-    const H = collect(h), C = collect(c), U = collect(u);
-    const types = Array.from(new Set([...Object.keys(H), ...Object.keys(C), ...Object.keys(U)])).sort();
+    const H = collect(h), U = collect(u);
+    const types = Array.from(new Set([...Object.keys(H), ...Object.keys(U)])).sort();
     return types.map(t => {{
       const names = Array.from(new Set([
         ...Object.keys(H[t] || {{}}),
-        ...Object.keys(C[t] || {{}}),
         ...Object.keys(U[t] || {{}}),
       ])).sort();
-      return {{ docType: t, fieldNames: names, H: H[t] || {{}}, C: C[t] || {{}}, U: U[t] || {{}} }};
+      return {{ docType: t, fieldNames: names, H: H[t] || {{}}, U: U[t] || {{}} }};
     }});
   }})();
   const cell = (v) => v == null
@@ -339,17 +347,15 @@ function compareResult(d) {{
     : matrixByType.map(g => {{
         // Counts per strategy for the header
         const cH = g.fieldNames.filter(n => g.H[n] != null).length;
-        const cC = g.fieldNames.filter(n => g.C[n] != null).length;
         const cU = g.fieldNames.filter(n => g.U[n] != null).length;
         const total = g.fieldNames.length;
         const rows = g.fieldNames.map(n => {{
-          const present = [g.H[n], g.C[n], g.U[n]].filter(x => x != null).length;
-          const isGap = present > 0 && present < 3;  // some strategies missed it
+          const present = [g.H[n], g.U[n]].filter(x => x != null).length;
+          const isGap = present > 0 && present < 2;  // one strategy missed it
           const rowStyle = isGap ? 'background:#fffbe6' : '';
           return `<tr style="${{rowStyle}}">
             <td><b>${{escape(n)}}</b></td>
             <td>${{cell(g.H[n])}}</td>
-            <td>${{cell(g.C[n])}}</td>
             <td>${{cell(g.U[n])}}</td>
           </tr>`;
         }}).join('');
@@ -359,7 +365,6 @@ function compareResult(d) {{
             <span style="color:var(--muted);font-size:12px">
               ${{total}} unique fields ·
               <span class="pill h">H ${{cH}}/${{total}}</span>
-              <span class="pill c">C ${{cC}}/${{total}}</span>
               <span class="pill u">CU ${{cU}}/${{total}}</span>
             </span>
           </div>
@@ -367,7 +372,6 @@ function compareResult(d) {{
             <thead><tr>
               <th>Field</th>
               <th><span class="pill h">HEURISTIC</span></th>
-              <th><span class="pill c">CLASSIFIER</span></th>
               <th><span class="pill u">CU</span></th>
             </tr></thead>
             <tbody>${{rows}}</tbody>
@@ -377,18 +381,16 @@ function compareResult(d) {{
   return `
     <section class="card">
       <h2>Comparison summary</h2>
-      <div class="kpis" style="grid-template-columns:repeat(3,1fr)">
+      <div class="kpis" style="grid-template-columns:repeat(2,1fr)">
         ${{col('Heuristic (DI)',  'h', h, h.billing.totalCostEstimateUsd, h.totalDurationMs)}}
-        ${{col('Classifier (DI)', 'c', c, h.billing.totalCostEstimateUsd, h.totalDurationMs)}}
         ${{col('Content Understanding', 'u', u, h.billing.totalCostEstimateUsd, h.totalDurationMs)}}
       </div>
     </section>
 
     <section class="card">
       <h2>Detected segments side-by-side</h2>
-      <div class="grid cols-3">
+      <div class="grid">
         ${{segCol('h', 'HEURISTIC',  'strategy-h', h)}}
-        ${{segCol('c', 'CLASSIFIER', 'strategy-c', c)}}
         ${{segCol('u', 'CU',         'strategy-u', u)}}
       </div>
     </section>
@@ -442,7 +444,7 @@ $('#f').addEventListener('submit', async (e) => {{
 
 @app.get("/healthz")
 def healthz() -> dict:
-    return {"status": "ok", "classifierConfigured": bool(settings.classifier_id)}
+    return {"status": "ok"}
 
 
 @app.post("/process")
@@ -458,7 +460,7 @@ async def process(
     Inputs:
       - file:        multipart upload (PDF)
       - x-tenant-id: HTTP header identifying the SaaS tenant (for cost allocation)
-      - mode:        "heuristic" | "classifier" | "compare" (query string or form field)
+      - mode:        "heuristic" | "cu" | "compare" (query string or form field)
     """
     # Reject non-PDF uploads early. octet-stream is allowed because some
     # browsers / clients don't sniff the type.
@@ -486,27 +488,30 @@ async def process(
     # Lazily build the DI client (returns 503 with a friendly message if misconfigured).
     di = _get_di()
 
-    # Compare mode runs ALL THREE strategies sequentially. We tried thread
+    # Compare mode runs both strategies sequentially. We tried thread
     # parallelism here but a single AI Services account throttles concurrent
     # DI+CU requests, which triggers SDK retry/backoff and made wall time
     # *worse*, not better. Sequential is the safer demo path.
     if chosen_mode == "compare":
-        h = _run_pipeline("heuristic",  di, pdf_bytes, tenant_id, file.filename)
-        c = _run_pipeline("classifier", di, pdf_bytes, tenant_id, file.filename)
-        u = _run_pipeline("cu",         di, pdf_bytes, tenant_id, file.filename)
+        h = _run_pipeline("heuristic", di, pdf_bytes, tenant_id, file.filename)
+        u = _run_pipeline("cu", di, pdf_bytes, tenant_id, file.filename)
         return JSONResponse({
             "tenantId": tenant_id,
             "filename": file.filename,
-            "comparison": _summarize_compare(h, c, u),
+            "comparison": _summarize_compare(h, u),
             "heuristic": h,
-            "classifier": c,
             "cu": u,
         })
 
-    if chosen_mode not in ("heuristic", "classifier", "cu"):
+    if chosen_mode == "classifier":
         raise HTTPException(
             status_code=400,
-            detail="mode must be heuristic, classifier, cu, or compare",
+            detail="The custom classifier mode was retired. Use heuristic, cu, or compare.",
+        )
+    if chosen_mode not in ("heuristic", "cu"):
+        raise HTTPException(
+            status_code=400,
+            detail="mode must be heuristic, cu, or compare",
         )
 
     # Single-strategy path.
@@ -540,7 +545,6 @@ def _run_pipeline(
 
     Stage 1 — Split pass:
         heuristic   -> prebuilt-layout over whole doc + keyword classifier
-        classifier  -> custom classifier (single managed call, cheaper meter)
         cu          -> heuristic split (DI prebuilt-layout) then CU prebuilts for extraction
 
     Stage 2 — Per-segment extraction:
@@ -572,27 +576,7 @@ def _run_pipeline(
         # Keyword-score each page, then collapse runs of same-typed pages into segments.
         page_types = [classify_page(t) for t in page_texts]
         segments = segments_from_page_types(page_types)
-    else:  # classifier
-        # Custom classifier required — fail fast with an actionable hint.
-        if not settings.classifier_id:
-            raise HTTPException(
-                status_code=503,
-                detail=(
-                    "Classifier mode requires CLASSIFIER_ID. Train a custom classifier in DI Studio "
-                    "(see app/sample/generate_training_set.py), then `azd env set CLASSIFIER_ID <id> && azd deploy`."
-                ),
-            )
-        split_model = settings.classifier_id  # logical model name for telemetry
-        # Classifier result doesn't expose total page count directly;
-        # read the PDF locally with pypdf (fast, no DI billing impact).
-        total_pages = len(PdfReader(io.BytesIO(pdf_bytes)).pages)
-        cls_result, split_ms = di.classify(classifier_id=settings.classifier_id, content=pdf_bytes)
-        segments = segments_from_classifier_result(cls_result)
-
-    # Pricing key differs from the model name: a custom classifier id like
-    # "idp-loan-docs-v1" maps to the "classifier" SKU ($3/1k), not its raw id.
-    split_pricing_key = "classifier" if strategy == "classifier" else "prebuilt-layout"
-    split_cost = estimate_cost_usd(split_pricing_key, total_pages)
+    split_cost = estimate_cost_usd("prebuilt-layout", total_pages)
     # Telemetry row #1 for this request: the split pass.
     emit_pages_processed(
         tenant_id=tenant_id,
@@ -673,7 +657,7 @@ def _run_pipeline(
             "billedPages": billed_pages,
             "splitPassPages": total_pages,
             "splitPassModel": split_model,
-            "splitPassPricingKey": split_pricing_key,
+            "splitPassPricingKey": "prebuilt-layout",
             "splitPassCostEstimateUsd": round(split_cost, 6),
             "totalCostEstimateUsd": round(total_cost, 6),
             "note": "Approximate. Split pass + per-segment analyze are billed separately.",
@@ -682,9 +666,8 @@ def _run_pipeline(
     }
 
 
-def _summarize_compare(h: dict, c: dict, u: dict) -> dict:
+def _summarize_compare(h: dict, u: dict) -> dict:
     h_cost = h["billing"]["totalCostEstimateUsd"]
-    c_cost = c["billing"]["totalCostEstimateUsd"]
     u_cost = u["billing"]["totalCostEstimateUsd"]
     def _sav(base: float, other: float) -> dict:
         return {
@@ -692,16 +675,13 @@ def _summarize_compare(h: dict, c: dict, u: dict) -> dict:
             "savingsPct": round((base - other) / base * 100, 1) if base else 0.0,
         }
     return {
-        "billedPages":     {"heuristic": h["billing"]["billedPages"], "classifier": c["billing"]["billedPages"], "cu": u["billing"]["billedPages"]},
-        "totalCostUsd":    {"heuristic": h_cost, "classifier": c_cost, "cu": u_cost,
-                            "classifierVsHeuristic": _sav(h_cost, c_cost),
-                            "cuVsHeuristic":         _sav(h_cost, u_cost),
-                            "cuVsClassifier":        _sav(c_cost, u_cost)},
-        "totalDurationMs": {"heuristic": h["totalDurationMs"], "classifier": c["totalDurationMs"], "cu": u["totalDurationMs"]},
-        "segmentCount":    {"heuristic": len(h["segments"]),  "classifier": len(c["segments"]), "cu": len(u["segments"])},
-        "segmentDocTypes": {"heuristic":  [s["doc_type"] for s in h["segments"]],
-                            "classifier": [s["doc_type"] for s in c["segments"]],
-                            "cu":         [s["doc_type"] for s in u["segments"]]},
+        "billedPages":     {"heuristic": h["billing"]["billedPages"], "cu": u["billing"]["billedPages"]},
+        "totalCostUsd":    {"heuristic": h_cost, "cu": u_cost,
+                            "cuVsHeuristic": _sav(h_cost, u_cost)},
+        "totalDurationMs": {"heuristic": h["totalDurationMs"], "cu": u["totalDurationMs"]},
+        "segmentCount":    {"heuristic": len(h["segments"]), "cu": len(u["segments"])},
+        "segmentDocTypes": {"heuristic": [s["doc_type"] for s in h["segments"]],
+                            "cu":        [s["doc_type"] for s in u["segments"]]},
     }
 
 
@@ -962,4 +942,21 @@ def _run_cu_pipeline(
 #
 #     overall_ms = (time.perf_counter() - overall_start) * 1000.0
 #     # ... (response assembly identical to current pipeline)
+
+app.include_router(create_library_router(
+    get_service=get_library_service,
+    get_di=_get_di,
+    run_pipeline=_run_pipeline,
+    get_agents=get_loan_agents,
+    get_knowledge=get_knowledge,
+))
+
+
+_STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
+app.mount("/static", StaticFiles(directory=_STATIC_DIR), name="static")
+
+
+@app.get("/")
+def home() -> FileResponse:
+    return FileResponse(os.path.join(_STATIC_DIR, "index.html"))
 

@@ -1,16 +1,20 @@
-"""Generate a synthetic, multi-document loan-application PDF for the demo.
+"""Generate synthetic loan-application PDFs for the demo.
 
-Creates a single PDF containing, in order:
+samples/loan_application_demo.pdf (the "missing documents" example) contains, in order:
   Pages 1-2 : Paystub (ACME Corp)
   Pages 3-4 : Bank statement (Lakeside Bank)
   Page  5   : W-2 (Wage and Tax Statement)
   Page  6   : U.S. Passport (rendered as an ID-card image)
   Page  7   : State ID / Driver License (rendered as an ID-card image)
 
-All data is fictitious. Output: samples/loan_application_demo.pdf
+app/examples/complete-packet.pdf holds every document the underwriting policy asks for:
+two paystubs, two bank statement months, a W-2 and photo IDs.
+
+All data is fictitious.
 """
 from __future__ import annotations
 
+from collections.abc import Callable, Sequence
 from pathlib import Path
 
 from reportlab.lib.colors import HexColor, black, white
@@ -20,6 +24,7 @@ from reportlab.pdfgen import canvas
 
 
 OUT = Path(__file__).resolve().parents[2] / "samples" / "loan_application_demo.pdf"
+COMPLETE_OUT = Path(__file__).resolve().parents[2] / "app" / "examples" / "complete-packet.pdf"
 
 
 def _header(c: canvas.Canvas, title: str) -> None:
@@ -263,18 +268,87 @@ def page_drivers_license(c: canvas.Canvas) -> None:
     c.showPage()
 
 
-def main() -> None:
-    OUT.parent.mkdir(parents=True, exist_ok=True)
-    c = canvas.Canvas(str(OUT), pagesize=LETTER)
-    page_paystub_1(c)
-    page_paystub_2(c)
-    page_bank_1(c)
-    page_bank_2(c)
-    page_w2(c)
-    page_passport(c)
-    page_drivers_license(c)
+def page_paystub_prior(c: canvas.Canvas) -> None:
+    _header(c, "ACME Corporation — Earnings Statement (Pay Stub)")
+    _kv(c, 1*inch, 9.7*inch, "Employee:", "Jane Q. Borrower")
+    _kv(c, 1*inch, 9.45*inch, "Employee ID:", "E-44821")
+    _kv(c, 1*inch, 9.20*inch, "Pay Period:", "2026-03-16 to 2026-03-31")
+    _kv(c, 1*inch, 8.95*inch, "Pay Date:", "2026-04-05")
+    _kv(c, 1*inch, 8.70*inch, "Gross Pay:", "$4,250.00")
+    _kv(c, 1*inch, 8.45*inch, "Net Pay:", "$3,180.55")
+    c.setFont("Helvetica-Bold", 11); c.drawString(1*inch, 7.7*inch, "Earnings")
+    c.setFont("Helvetica", 10)
+    c.drawString(1*inch, 7.45*inch, "Regular         80.00 hrs   $53.13/hr   $4,250.00")
+    c.setFont("Helvetica-Bold", 11); c.drawString(1*inch, 6.7*inch, "Deductions")
+    c.setFont("Helvetica", 10)
+    c.drawString(1*inch, 6.45*inch, "Federal Tax     $510.00")
+    c.drawString(1*inch, 6.25*inch, "Social Security $263.50")
+    c.drawString(1*inch, 6.05*inch, "Medicare         $61.62")
+    c.drawString(1*inch, 5.85*inch, "401(k)          $234.33")
+    c.showPage()
+
+
+def page_bank_feb(c: canvas.Canvas) -> None:
+    _header(c, "Lakeside Bank — Account Statement")
+    _kv(c, 1*inch, 9.7*inch, "Account Holder:", "Jane Q. Borrower")
+    _kv(c, 1*inch, 9.45*inch, "Account Number:", "****-**-3271")
+    _kv(c, 1*inch, 9.20*inch, "Statement Period:", "2026-02-01 to 2026-02-28")
+    _kv(c, 1*inch, 8.95*inch, "Beginning Balance:", "$5,158.23")
+    _kv(c, 1*inch, 8.70*inch, "Ending Balance:", "$8,420.10")
+    c.setFont("Helvetica-Bold", 11); c.drawString(1*inch, 8.2*inch, "Transaction History")
+    c.setFont("Helvetica", 9)
+    rows = [
+        ("2026-02-02", "ACH DEPOSIT  ACME PAYROLL",  "+3,180.55"),
+        ("2026-02-04", "POS  GROCERY MART",          "  -212.40"),
+        ("2026-02-06", "ATM WITHDRAWAL  #3307",      "  -200.00"),
+        ("2026-02-10", "MORTGAGE PMT  HOMEFIRST",    "-1,945.00"),
+        ("2026-02-13", "ELEC BILL  CITY POWER",      "  -118.75"),
+        ("2026-02-16", "ACH DEPOSIT  ACME PAYROLL",  "+3,180.55"),
+        ("2026-02-19", "POS  FUEL STATION",          "   -58.90"),
+        ("2026-02-22", "POS  RESTAURANT",            "   -64.30"),
+        ("2026-02-26", "TRANSFER TO SAVINGS",        "  -500.00"),
+        ("2026-02-28", "INTEREST CREDIT",            "   +0.12"),
+    ]
+    y = 7.95 * inch
+    c.drawString(1*inch, y, "DATE          DESCRIPTION                          AMOUNT")
+    y -= 0.18*inch
+    for d, desc, amt in rows:
+        c.drawString(1*inch, y, f"{d}    {desc:<36}{amt:>12}")
+        y -= 0.18 * inch
+    c.setFont("Helvetica", 10)
+    c.drawString(1*inch, y - 0.2*inch, "Total Deposits: $6,361.22")
+    c.drawString(1*inch, y - 0.4*inch, "Total Withdrawals: $3,099.35")
+    c.showPage()
+
+
+def write_complete_packet() -> None:
+    """Writes app/examples/complete-packet.pdf.
+
+    Document types alternate (paystub, bank, paystub, bank, W-2, ID, ID) so the
+    heuristic splitter, which merges adjacent pages of the same type, keeps each
+    paystub and bank statement as its own segment.
+    """
+    _write(COMPLETE_OUT, [
+        page_paystub_1, page_paystub_2, page_bank_1, page_bank_2,
+        page_paystub_prior, page_bank_feb, page_w2, page_passport, page_drivers_license,
+    ])
+
+
+def _write(out: Path, pages: Sequence[Callable[[canvas.Canvas], None]]) -> None:
+    out.parent.mkdir(parents=True, exist_ok=True)
+    c = canvas.Canvas(str(out), pagesize=LETTER)
+    for page in pages:
+        page(c)
     c.save()
-    print(f"Wrote {OUT}")
+    print(f"Wrote {out}")
+
+
+def main() -> None:
+    _write(OUT, [
+        page_paystub_1, page_paystub_2, page_bank_1, page_bank_2,
+        page_w2, page_passport, page_drivers_license,
+    ])
+    write_complete_packet()
 
 
 if __name__ == "__main__":

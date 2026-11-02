@@ -1,0 +1,358 @@
+{
+  "correlationId": "4dad90f3-2672-4ad2-a9df-7d5beb6e9e3b",
+  "tenantId": "examples",
+  "filename": "complete-packet.pdf",
+  "splitStrategy": "heuristic",
+  "totalPages": 9,
+  "totalDurationMs": 77088.61,
+  "modelsUsed": [
+    {
+      "model_id": "prebuilt-bankStatement.us",
+      "calls": 2,
+      "pages": 3
+    },
+    {
+      "model_id": "prebuilt-idDocument",
+      "calls": 2,
+      "pages": 2
+    },
+    {
+      "model_id": "prebuilt-layout",
+      "calls": 1,
+      "pages": 9
+    },
+    {
+      "model_id": "prebuilt-payStub.us",
+      "calls": 2,
+      "pages": 3
+    },
+    {
+      "model_id": "prebuilt-tax.us.w2",
+      "calls": 1,
+      "pages": 1
+    }
+  ],
+  "billing": {
+    "billedPages": 18,
+    "splitPassPages": 9,
+    "splitPassModel": "prebuilt-layout",
+    "splitPassPricingKey": "prebuilt-layout",
+    "splitPassCostEstimateUsd": 0.09,
+    "totalCostEstimateUsd": 0.18,
+    "note": "Approximate. Split pass + per-segment analyze are billed separately."
+  },
+  "segments": [
+    {
+      "doc_type": "paystub",
+      "model_id": "prebuilt-payStub.us",
+      "page_range": [
+        1,
+        2
+      ],
+      "pages": 2,
+      "duration_ms": 10868.08,
+      "cost_estimate_usd": 0.02,
+      "documents": [
+        {
+          "doc_type": "payStub.us",
+          "confidence": 1.0,
+          "fields": {
+            "CurrentPeriodGrossPay": {
+              "value": "$4,250.00",
+              "confidence": 0.97
+            },
+            "CurrentPeriodNetPay": {
+              "value": "$3,180.55",
+              "confidence": 0.971
+            },
+            "EmployeeName": {
+              "value": "Jane Q. Borrower",
+              "confidence": 0.915
+            },
+            "EmployerName": {
+              "value": "ACME Corporation",
+              "confidence": 0.878
+            },
+            "PayDate": {
+              "value": "2026-04-20",
+              "confidence": 0.967
+            },
+            "PayPeriodEndDate": {
+              "value": "2026-04-15",
+              "confidence": 0.962
+            },
+            "PayPeriodStartDate": {
+              "value": "2026-04-01",
+              "confidence": 0.949
+            },
+            "YearToDateGrossPay": {
+              "value": "$34,000.00",
+              "confidence": 0.906
+            }
+          }
+        },
+        {
+          "doc_type": "payStub.us",
+          "confidence": 1.0,
+          "fields": {
+            "EmployerAddress": {
+              "value": "100 Industrial Way, Springfield IL 62701",
+              "confidence": 0.762
+            },
+            "EmployerName": {
+              "value": "ACME Corporation",
+              "confidence": 0.87
+            }
+          }
+        }
+      ]
+    },
+    {
+      "doc_type": "bank_statement",
+      "model_id": "prebuilt-bankStatement.us",
+      "page_range": [
+        3,
+        4
+      ],
+      "pages": 2,
+      "duration_ms": 12934.88,
+      "cost_estimate_usd": 0.02,
+      "documents": [
+        {
+          "doc_type": "bankStatement.us",
+          "confidence": 1.0,
+          "fields": {
+            "Accounts": {
+              "value": null,
+              "confidence": null
+            }
+          }
+        }
+      ]
+    },
+    {
+      "doc_type": "paystub",
+      "model_id": "prebuilt-payStub.us",
+      "page_range": [
+        5,
+        5
+      ],
+      "pages": 1,
+      "duration_ms": 10055.18,
+      "cost_estimate_usd": 0.01,
+      "documents": [
+        {
+          "doc_type": "payStub.us",
+          "confidence": 1.0,
+          "fields": {
+            "CurrentPeriodGrossPay": {
+              "value": "$4,250.00",
+              "confidence": 0.971
+            },
+            "CurrentPeriodNetPay": {
+              "value": "$3,180.55",
+              "confidence": 0.973
+            },
+            "EmployeeName": {
+              "value": "Jane Q. Borrower",
+              "confidence": 0.917
+            },
+            "EmployerName": {
+              "value": "ACME Corporation",
+              "confidence": 0.881
+            },
+            "PayDate": {
+              "value": "2026-04-05",
+              "confidence": 0.969
+            },
+            "PayPeriodEndDate": {
+              "value": "2026-03-31",
+              "confidence": 0.962
+            },
+            "PayPeriodStartDate": {
+              "value": "2026-03-16",
+              "confidence": 0.952
+            }
+          }
+        }
+      ]
+    },
+    {
+      "doc_type": "bank_statement",
+      "model_id": "prebuilt-bankStatement.us",
+      "page_range": [
+        6,
+        6
+      ],
+      "pages": 1,
+      "duration_ms": 10556.05,
+      "cost_estimate_usd": 0.01,
+      "documents": [
+        {
+          "doc_type": "bankStatement.us",
+          "confidence": 1.0,
+          "fields": {
+            "Accounts": {
+              "value": null,
+              "confidence": null
+            },
+            "StatementEndDate": {
+              "value": "2026-02-28",
+              "confidence": 0.971
+            },
+            "StatementStartDate": {
+              "value": "2026-02-01",
+              "confidence": 0.97
+            }
+          }
+        }
+      ]
+    },
+    {
+      "doc_type": "w2",
+      "model_id": "prebuilt-tax.us.w2",
+      "page_range": [
+        7,
+        7
+      ],
+      "pages": 1,
+      "duration_ms": 8806.94,
+      "cost_estimate_usd": 0.01,
+      "documents": []
+    },
+    {
+      "doc_type": "passport",
+      "model_id": "prebuilt-idDocument",
+      "page_range": [
+        8,
+        8
+      ],
+      "pages": 1,
+      "duration_ms": 6025.37,
+      "cost_estimate_usd": 0.01,
+      "documents": [
+        {
+          "doc_type": "idDocument.passport",
+          "confidence": 1.0,
+          "fields": {
+            "CountryRegion": {
+              "value": "USA",
+              "confidence": 0.926
+            },
+            "DateOfBirth": {
+              "value": "15 MAR 1986",
+              "confidence": 0.932
+            },
+            "DocumentNumber": {
+              "value": "X12345678",
+              "confidence": 0.93
+            },
+            "DocumentType": {
+              "value": "P",
+              "confidence": 0.969
+            },
+            "FirstName": {
+              "value": "JANE QUINN",
+              "confidence": 0.898
+            },
+            "LastName": {
+              "value": "BORROWER",
+              "confidence": 0.957
+            },
+            "MachineReadableZone": {
+              "value": "P<USABORROWER << JANE<QUINN <<<<<<<<<<<<<<<<<<<<<\nX123456784USA8603155F3201095 <<<<<<<<<<<<<< 04",
+              "confidence": 0.655
+            },
+            "Nationality": {
+              "value": "UNITED STATES OF AMERICA",
+              "confidence": 0.827
+            },
+            "Sex": {
+              "value": "F",
+              "confidence": 0.896
+            }
+          }
+        }
+      ]
+    },
+    {
+      "doc_type": "drivers_license",
+      "model_id": "prebuilt-idDocument",
+      "page_range": [
+        9,
+        9
+      ],
+      "pages": 1,
+      "duration_ms": 4904.99,
+      "cost_estimate_usd": 0.01,
+      "documents": [
+        {
+          "doc_type": "idDocument.driverLicense",
+          "confidence": 1.0,
+          "fields": {
+            "Address": {
+              "value": "742 EVERGREEN TER\nSPRINGFIELD IL 62704",
+              "confidence": 0.553
+            },
+            "CountryRegion": {
+              "value": null,
+              "confidence": 0.995
+            },
+            "DateOfBirth": {
+              "value": "1986-03-15",
+              "confidence": 0.891
+            },
+            "DateOfExpiration": {
+              "value": "2030-03-15",
+              "confidence": 0.895
+            },
+            "DateOfIssue": {
+              "value": "2024-03-15",
+              "confidence": 0.819
+            },
+            "DocumentNumber": {
+              "value": "B123-4567-8901",
+              "confidence": 0.83
+            },
+            "Endorsements": {
+              "value": "NONE",
+              "confidence": 0.617
+            },
+            "EyeColor": {
+              "value": "BRN",
+              "confidence": 0.901
+            },
+            "FirstName": {
+              "value": "JANE QUINN",
+              "confidence": 0.818
+            },
+            "Height": {
+              "value": "5'-06\"",
+              "confidence": 0.798
+            },
+            "LastName": {
+              "value": "BORROWER",
+              "confidence": 0.826
+            },
+            "Region": {
+              "value": "ILLINOIS",
+              "confidence": 0.695
+            },
+            "Restrictions": {
+              "value": "NONE",
+              "confidence": 0.747
+            },
+            "Sex": {
+              "value": "F",
+              "confidence": 0.671
+            },
+            "VehicleClassifications": {
+              "value": "D",
+              "confidence": 0.514
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

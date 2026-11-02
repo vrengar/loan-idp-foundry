@@ -1,0 +1,2 @@
+# PDFs are binary. Never convert their line endings; that would break the cross-reference offsets.
+*.pdf binary

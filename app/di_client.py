@@ -68,31 +68,6 @@ class DIClient:
         duration_ms = (time.perf_counter() - start) * 1000.0
         return result, duration_ms
 
-    def classify(
-        self,
-        *,
-        classifier_id: str,
-        content: bytes,
-    ) -> tuple[Any, float]:
-        """Run a custom classifier (split + label in one call).
-
-        Used by the classifier-mode pipeline to detect document boundaries.
-        Cheaper meter ($3/1k pages) than the heuristic mode's prebuilt-layout
-        split pass ($10/1k).
-
-        result.documents[i] has .doc_type and .bounding_regions[*].page_number.
-        Returns (result, duration_ms).
-        """
-        from azure.ai.documentintelligence.models import ClassifyDocumentRequest
-        start = time.perf_counter()
-        poller = self._client.begin_classify_document(
-            classifier_id=classifier_id,
-            body=ClassifyDocumentRequest(bytes_source=content),
-        )
-        result = poller.result()
-        duration_ms = (time.perf_counter() - start) * 1000.0
-        return result, duration_ms
-
     @staticmethod
     def page_text(result: AnalyzeResult) -> list[str]:
         """Return joined text per page, in page order."""

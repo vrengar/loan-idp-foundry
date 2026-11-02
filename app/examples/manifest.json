@@ -1,0 +1,25 @@
+{
+  "examples": [
+    {
+      "id": "complete-packet",
+      "title": "Complete packet",
+      "file": "complete-packet.pdf",
+      "description": "Every document type the policy asks for: two paystubs, two bank statement months, a 2025 W-2 and photo IDs. The review still refers, because the W-2 does not extract and the paystub YTD gross is inconsistent (see the README).",
+      "tryIt": "Ask about the monthly income, then run the review and read the checks it flags."
+    },
+    {
+      "id": "missing-documents",
+      "title": "Missing documents",
+      "file": "missing-documents.pdf",
+      "description": "One paystub and one month of bank statements. The policy asks for two of each.",
+      "tryIt": "Run the review and check which documents it reports as missing."
+    },
+    {
+      "id": "identity-conflict",
+      "title": "Identity conflict",
+      "file": "identity-conflict.pdf",
+      "description": "The paystub, bank statement, passport and driver's license each name a different person.",
+      "tryIt": "Run the review and read the identity findings."
+    }
+  ]
+}

@@ -1,5 +1,7 @@
 # IDP Demo — Technical Specification
 
+> **Historical.** This spec predates the document library, the Content Understanding router, and the Foundry IQ knowledge base. It also describes the retired classifier mode. For the current architecture, see the [README](../README.md).
+
 ## 1. App name
 **IDP Demo** — *Intelligent Document Processing for Loan Application Review*
 

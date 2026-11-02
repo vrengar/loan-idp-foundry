@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Loan Document Intelligence</title>
+  <link rel="stylesheet" href="/static/styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">Loan Document Intelligence <span class="sub">Foundry · Claude · Content Understanding</span></div>
+  <div class="topbar-right">
+    <label>Tenant <input id="tenant" size="12"></label>
+    <span id="health" class="pill">checking…</span>
+    <button id="openArch" class="ghost" type="button">Architecture</button>
+  </div>
+</header>
+<main class="grid">
+  <section class="panel">
+    <h2>Document library</h2>
+    <details id="examples" class="examples" open>
+      <summary>Example packets</summary>
+      <p class="muted">Open loads a sample packet with stored results (no DI, CU, or Claude calls). Process live runs the PDF through the strategy selected below. Compare is not available for examples, so Heuristic is used.</p>
+      <ul id="exampleList" class="example-list"></ul>
+    </details>
+    <form id="uploadForm" class="upload">
+      <input type="file" id="file" accept="application/pdf" required>
+      <select id="mode">
+        <option value="heuristic">Heuristic (Document Intelligence)</option>
+        <option value="cu">Content Understanding router</option>
+        <option value="compare">Compare heuristic vs CU (not saved)</option>
+      </select>
+      <button type="submit">Upload and process</button>
+    </form>
+    <div id="uploadStatus" class="muted"></div>
+    <ul id="docs" class="doc-list"></ul>
+    <form id="libraryAskForm" class="ask">
+      <input id="libraryQuestion" placeholder="Ask across the library, e.g. Which applicants are missing a W-2?">
+      <button type="submit">Ask library</button>
+    </form>
+    <div id="libraryAnswer"></div>
+  </section>
+  <section class="panel">
+    <h2>Extraction</h2>
+    <div id="details" class="muted">Select a document.</div>
+  </section>
+  <section class="panel">
+    <h2>Ask the agent</h2>
+    <div id="chat" class="chat"></div>
+    <form id="askForm" class="ask">
+      <input id="question" placeholder="e.g. What is the applicant's monthly gross income?" disabled>
+      <button type="submit" disabled>Ask</button>
+    </form>
+    <h2>Underwriting review</h2>
+    <button id="runReview" type="button" disabled>Run three-agent review</button>
+    <div id="review" class="muted"></div>
+  </section>
+</main>
+<dialog id="archDialog">
+  <div class="dialog-head">
+    <strong>Architecture</strong>
+    <button id="closeArch" class="ghost" type="button">Close</button>
+  </div>
+  <div id="archTabs" class="tabs"></div>
+  <div id="archBody" class="arch-body"></div>
+</dialog>
+<script src="/static/app.js"></script>
+</body>
+</html>

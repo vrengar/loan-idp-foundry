@@ -1,0 +1,394 @@
+{
+  "correlationId": "de0f888e-b1b4-4c1f-9f70-bc9453df47e6",
+  "tenantId": "examples",
+  "filename": "identity-conflict.pdf",
+  "splitStrategy": "cu",
+  "totalPages": 5,
+  "totalDurationMs": 118058.02,
+  "modelsUsed": [
+    {
+      "model_id": "loan_docs_router",
+      "calls": 1,
+      "pages": 5
+    },
+    {
+      "model_id": "prebuilt-bankStatement.us",
+      "calls": 1,
+      "pages": 1
+    },
+    {
+      "model_id": "prebuilt-idDocument.generic",
+      "calls": 1,
+      "pages": 1
+    },
+    {
+      "model_id": "prebuilt-idDocument.passport",
+      "calls": 1,
+      "pages": 1
+    },
+    {
+      "model_id": "prebuilt-payStub.us",
+      "calls": 1,
+      "pages": 1
+    },
+    {
+      "model_id": "prebuilt-tax.us.w2",
+      "calls": 1,
+      "pages": 1
+    }
+  ],
+  "billing": {
+    "billedPages": 5,
+    "splitPassPages": 0,
+    "splitPassModel": "loan_docs_router",
+    "splitPassPricingKey": "cu.prebuilt",
+    "splitPassCostEstimateUsd": 0.0,
+    "totalCostEstimateUsd": 0.15,
+    "note": "CU router analyzer did split + classify + route + extract in one call. Cost approximated per segment at the cu.prebuilt rate."
+  },
+  "segments": [
+    {
+      "doc_type": "paystub",
+      "model_id": "prebuilt-payStub.us",
+      "page_range": [
+        1,
+        1
+      ],
+      "pages": 1,
+      "duration_ms": 118054.01,
+      "cost_estimate_usd": 0.03,
+      "documents": [
+        {
+          "doc_type": "paystub",
+          "confidence": null,
+          "fields": {
+            "EmployeeAddress": {
+              "value": null,
+              "confidence": 0.614
+            },
+            "EmployeeName": {
+              "value": "David Lee Johnson",
+              "confidence": 0.958
+            },
+            "EmployeeSSN": {
+              "value": null,
+              "confidence": 0.858
+            },
+            "EmployerAddress": {
+              "value": null,
+              "confidence": 0.858
+            },
+            "EmployerName": {
+              "value": "Umbrella Health",
+              "confidence": 0.961
+            },
+            "PayDate": {
+              "value": "2026-02-18",
+              "confidence": 0.995
+            },
+            "PayPeriodStartDate": {
+              "value": null,
+              "confidence": 0.685
+            },
+            "PayPeriodEndDate": {
+              "value": null,
+              "confidence": 0.928
+            },
+            "CurrentPeriodGrossPay": {
+              "value": 3127.82,
+              "confidence": 0.978
+            },
+            "YearToDateGrossPay": {
+              "value": 18766.92,
+              "confidence": 0.973
+            },
+            "CurrentPeriodTaxes": {
+              "value": null,
+              "confidence": 0.975
+            },
+            "YearToDateTaxes": {
+              "value": null,
+              "confidence": 0.975
+            },
+            "CurrentPeriodDeductions": {
+              "value": null,
+              "confidence": 0.975
+            },
+            "YearToDateDeductions": {
+              "value": null,
+              "confidence": 0.975
+            },
+            "CurrentPeriodNetPay": {
+              "value": 2314.59,
+              "confidence": 0.971
+            },
+            "YearToDateNetPay": {
+              "value": null,
+              "confidence": 0.975
+            }
+          }
+        }
+      ]
+    },
+    {
+      "doc_type": "bank_statement",
+      "model_id": "prebuilt-bankStatement.us",
+      "page_range": [
+        2,
+        2
+      ],
+      "pages": 1,
+      "duration_ms": 118054.01,
+      "cost_estimate_usd": 0.03,
+      "documents": [
+        {
+          "doc_type": "bank_statement",
+          "confidence": null,
+          "fields": {
+            "BankAddress": {
+              "value": null,
+              "confidence": 0.614
+            },
+            "BankName": {
+              "value": "Pinecrest Savings",
+              "confidence": 0.772
+            },
+            "AccountHolderAddress": {
+              "value": null,
+              "confidence": 0.858
+            },
+            "AccountHolderName": {
+              "value": "Maria Elena Nguyen",
+              "confidence": 0.962
+            },
+            "StatementStartDate": {
+              "value": "2026-03-01",
+              "confidence": 0.993
+            },
+            "StatementEndDate": {
+              "value": "2026-03-31",
+              "confidence": 0.993
+            },
+            "Accounts": {
+              "value": null,
+              "confidence": null
+            }
+          }
+        }
+      ]
+    },
+    {
+      "doc_type": "w2",
+      "model_id": "prebuilt-tax.us.w2",
+      "page_range": [
+        3,
+        3
+      ],
+      "pages": 1,
+      "duration_ms": 118054.01,
+      "cost_estimate_usd": 0.03,
+      "documents": [
+        {
+          "doc_type": "w2",
+          "confidence": null,
+          "fields": {
+            "W2Copies": {
+              "value": null,
+              "confidence": null
+            }
+          }
+        }
+      ]
+    },
+    {
+      "doc_type": "passport",
+      "model_id": "prebuilt-idDocument.passport",
+      "page_range": [
+        4,
+        4
+      ],
+      "pages": 1,
+      "duration_ms": 118054.01,
+      "cost_estimate_usd": 0.03,
+      "documents": [
+        {
+          "doc_type": "passport",
+          "confidence": null,
+          "fields": {
+            "DocumentNumber": {
+              "value": "Z74589483",
+              "confidence": 0.993
+            },
+            "FirstName": {
+              "value": "OLIVIA MAE",
+              "confidence": 0.988
+            },
+            "MiddleName": {
+              "value": null,
+              "confidence": 0.614
+            },
+            "LastName": {
+              "value": "BORROWER",
+              "confidence": 0.99
+            },
+            "Aliases": {
+              "value": null,
+              "confidence": null
+            },
+            "BirthDate": {
+              "value": "1966-06-16",
+              "confidence": 0.994
+            },
+            "ExpirationDate": {
+              "value": null,
+              "confidence": 0.928
+            },
+            "IssueDate": {
+              "value": null,
+              "confidence": 0.928
+            },
+            "Sex": {
+              "value": "X",
+              "confidence": 0.982
+            },
+            "CountryRegion": {
+              "value": "USA",
+              "confidence": 0.981
+            },
+            "DocumentType": {
+              "value": "P",
+              "confidence": 0.972
+            },
+            "Nationality": {
+              "value": "UNITED STATES OF AMERICA",
+              "confidence": 0.952
+            },
+            "PlaceOfBirth": {
+              "value": null,
+              "confidence": 0.858
+            },
+            "PlaceOfIssue": {
+              "value": null,
+              "confidence": 0.858
+            },
+            "IssuingAuthority": {
+              "value": null,
+              "confidence": 0.858
+            },
+            "PersonalNumber": {
+              "value": null,
+              "confidence": 0.858
+            },
+            "MachineReadableZone": {
+              "value": "P<USABORROWER<<OLIVIA<MAE<<<<<<<<<<<<<<<<<<<<< Z745894834USA1966065F20240109<<<<<<<<<<<<<<04",
+              "confidence": 0.874
+            }
+          }
+        }
+      ]
+    },
+    {
+      "doc_type": "idDocument.generic",
+      "model_id": "prebuilt-idDocument.generic",
+      "page_range": [
+        5,
+        5
+      ],
+      "pages": 1,
+      "duration_ms": 118054.01,
+      "cost_estimate_usd": 0.03,
+      "documents": [
+        {
+          "doc_type": "idDocument.generic",
+          "confidence": null,
+          "fields": {
+            "CountryRegion": {
+              "value": "USA",
+              "confidence": null
+            },
+            "Region": {
+              "value": "TEXAS",
+              "confidence": null
+            },
+            "DocumentNumber": {
+              "value": "G899-6801-8190",
+              "confidence": 0.71
+            },
+            "DocumentDiscriminator": {
+              "value": null,
+              "confidence": 0.858
+            },
+            "FirstName": {
+              "value": "DAVID LEE",
+              "confidence": 0.717
+            },
+            "LastName": {
+              "value": "ROSSI",
+              "confidence": 0.595
+            },
+            "Address": {
+              "value": "4676 MAPLE AVE SPRINGFIELD IL 62704",
+              "confidence": 0.516
+            },
+            "BirthDate": {
+              "value": "1994-01-04",
+              "confidence": 0.812
+            },
+            "ExpirationDate": {
+              "value": "2024-03-15",
+              "confidence": 0.797
+            },
+            "IssueDate": {
+              "value": "2018-03-15",
+              "confidence": 0.799
+            },
+            "EyeColor": {
+              "value": "GRN",
+              "confidence": 0.797
+            },
+            "HairColor": {
+              "value": null,
+              "confidence": 0.858
+            },
+            "Height": {
+              "value": "6'-10\"",
+              "confidence": 0.736
+            },
+            "Weight": {
+              "value": null,
+              "confidence": 0.858
+            },
+            "Sex": {
+              "value": "X",
+              "confidence": 0.686
+            },
+            "Endorsements": {
+              "value": "NONE",
+              "confidence": 0.795
+            },
+            "Restrictions": {
+              "value": "NONE",
+              "confidence": 0.796
+            },
+            "PersonalNumber": {
+              "value": null,
+              "confidence": 0.858
+            },
+            "PlaceOfBirth": {
+              "value": null,
+              "confidence": 0.858
+            },
+            "VehicleClass": {
+              "value": "D",
+              "confidence": 0.76
+            },
+            "Category": {
+              "value": null,
+              "confidence": 0.858
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
